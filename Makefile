@@ -42,7 +42,7 @@ $(BUILD_DIR):
 	$(CC) $(CFLAGS) -o $@ -c $< 
 
 coomer: $(HEADERS) $(SRCS) $(BUILD_DIR) $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $(OBJ) $(LIBS) $(LDFLAGS) -v
+	$(CC) $(CFLAGS) -o $@ $(OBJ) $(LIBS) $(LDFLAGS)
 
 sanitize:
 	$(CFLAGS) += -fsanitize=address -fno-omit-frame-pointer -g

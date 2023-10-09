@@ -112,7 +112,7 @@ typedef struct {
 #define sb_free(sb)        coom_free((sb).items)
 #define sb_as_sv(sb)       SV_FROM((sb).items, (sb).count)
 
-#define TEMP_CAPACITY      (8 * 1024 * 1024)
+#define TEMP_CAPACITY      (1 * 1024 * 1024)
 
 char  *temp_strdup(const char *cstr);
 void  *temp_alloc(size_t size);
@@ -146,4 +146,5 @@ typedef struct {
 #define vec2_lenght(v)          sqrt((v).x *(v).x + (v).y * (v).y)
 vec2_t vec2_normalize(vec2_t v);
 
+void   mssleep(u32 ms);
 #endif

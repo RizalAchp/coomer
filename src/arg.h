@@ -30,13 +30,3 @@ static inline bool options_cmp_impl(const char *opt, const char *opt_short, cons
         __VA_ARGS__                                                                                                         \
         continue;                                                                                                           \
     }
-
-typedef struct {
-    bool        windowed;
-    bool        select;
-    f32         delay_second;
-    const char *new_config;
-    const char *config;
-} options_args;
-
-#define OPTIONS_ARGS_DEFAULT ((options_args){.windowed = false, .delay_second = 0, .new_config = NULL, .config = NULL})

@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <time.h>
 
 bool verbose = false;
 
@@ -143,4 +144,11 @@ vec2_t vec2_normalize(vec2_t v) {
     f32 b = vec2_lenght(v);
     if (b == 0.0) return vec2(0.0, 0.0);
     else return vec2(v.x / b, v.y / b);
+}
+
+void mssleep(u32 ms) {
+    struct timespec ts;
+    ts.tv_sec  = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000;
+    nanosleep(&ts, NULL);
 }

@@ -1,14 +1,22 @@
 #include "coomer.h"
 
-#define ERROR_BUFFER_SIZE 2 << 10
-int coom_xerror_handler(Display *d, XErrorEvent *e) {
-    char buffer[ERROR_BUFFER_SIZE] = {0};
-    XGetErrorText(d, e->error_code, buffer, sizeof(buffer));
-    coom_error("%s - (X11 Error)", buffer);
+static int coom_xerror_handler(Display *d, XErrorEvent *e) {
+    char *temp = temp_alloc(1 << 10);
+    XGetErrorText(d, e->error_code, temp, 1 << 10);
+    coom_error("%s - (X11 Error)", temp);
+    temp_free(512);
     return 0;
 }
 
+Display *coom_open_display(void) {
+    Display *dpy = XOpenDisplay(NULL);
+    ASSERT_EXIT(dpy != NULL, 1, "Failed to open display");
+    XSetErrorHandler(coom_xerror_handler);
+    return dpy;
+}
+
 Window coom_select_window(Display *d) {
+    coom_info("%s", __PRETTY_FUNCTION__);
     Cursor cursor = XCreateFontCursor(d, XC_crosshair);
 
     Window result = DefaultRootWindow(d);
@@ -24,50 +32,21 @@ Window coom_select_window(Display *d) {
     }
 
 defer:
-    XFreeCursor(d, cursor);
-    XUngrabPointer(d, CurrentTime);
     XUngrabKeyboard(d, CurrentTime);
+    XUngrabPointer(d, CurrentTime);
+    XFreeCursor(d, cursor);
     return result;
 }
-
-// clang-format off
-static const strview frag_shader = SV(
-    "#version 130\n"
-    "out mediump vec4 color;\n"
-    "in mediump vec2 texcoord;\n"
-    "uniform sampler2D tex;\n"
-    "uniform vec2 cursorPos;\n"
-    "uniform vec2 windowSize;\n"
-    "uniform float flShadow;\n"
-    "uniform float flRadius;\n"
-    "uniform float cameraScale;\n"
-    "void main() {\n"
-    "   vec4 cursor = vec4(cursorPos.x, windowSize.y - cursorPos.y, 0.0, 1.0);\n"
-    "   color = mix(texture(tex, texcoord), vec4(0.0, 0.0, 0.0, 0.0), length(cursor - gl_FragCoord) < (flRadius * cameraScale) ? 0.0 : flShadow);\n"
-    "}\n\0"
-);
-static const strview vert_shader = SV(
-    "#version 130\n"
-    "in vec3 aPos;\n"
-    "in vec2 aTexCoord;\n"
-    "out vec2 texcoord;\n"
-    "uniform vec2 cameraPos;\n"
-    "uniform float cameraScale;\n"
-    "uniform vec2 windowSize;\n"
-    "uniform vec2 screenshotSize;\n"
-    "uniform vec2 cursorPos;\n"
-    "vec3 to_world(vec3 v) {\n"
-    "vec2 ratio = vec2(windowSize.x / screenshotSize.x / cameraScale, windowSize.y / screenshotSize.y / cameraScale);\n"
-    "   return vec3((v.x / screenshotSize.x * 2.0 - 1.0) / ratio.x, (v.y / screenshotSize.y * 2.0 - 1.0) / ratio.y, v.z);\n"
-    "}\n"
-    "void main() {\n"
-    "   gl_Position = vec4(to_world((aPos - vec3(cameraPos * vec2(1.0, -1.0), 0.0))), 1.0);\n"
-    "   texcoord = aTexCoord;\n"
-    "}\n\0"
-);
-// clang-format on
+short coom_get_monitor_rate(Display *d) {
+    coom_info("%s", __PRETTY_FUNCTION__);
+    XRRScreenConfiguration *screen_cfg = XRRGetScreenInfo(d, DefaultRootWindow(d));
+    short                   rate       = XRRConfigCurrentRate(screen_cfg);
+    XRRFreeScreenConfigInfo(screen_cfg);
+    return rate;
+}
 
 static GLuint coom_new_shader(const strview shader, GLenum kind) {
+    coom_info("%s", __PRETTY_FUNCTION__);
     GLuint result = glCreateShader(kind);
     glShaderSource(result, 1, &shader.data, NULL);
     glCompileShader(result);
@@ -75,36 +54,74 @@ static GLuint coom_new_shader(const strview shader, GLenum kind) {
     GLint success;
     glGetShaderiv(result, GL_COMPILE_STATUS, &success);
     if (!success) {
-        char buff[512];
-        glGetShaderInfoLog(result, sizeof(buff), NULL, buff);
-        coom_error("during shader compilation: %s", buff);
+        char *temp = temp_alloc(512);
+        glGetShaderInfoLog(result, 512, NULL, temp);
+        coom_error("during shader compilation: %s", temp);
+        temp_free(512);
     }
     return result;
 }
 
-static GLuint coom_new_shader_prog(const strview vertex, const strview fragment) {
-    GLuint prog            = glCreateProgram();
-    GLuint vertex_shader   = coom_new_shader(vertex, GL_VERTEX_SHADER);
-    GLuint fragment_shader = coom_new_shader(fragment, GL_FRAGMENT_SHADER);
+static GLuint coom_new_shader_prog(void) {
+    coom_info("%s", __PRETTY_FUNCTION__);
+    GLuint prog = glCreateProgram();
+    GLuint vertex_shader =
+        coom_new_shader(SV("#version 130\n"
+                           "in vec3 aPos;"
+                           "in vec2 aTexCoord;"
+                           "out vec2 texcoord;"
+                           "uniform vec2 cameraPos;"
+                           "uniform float cameraScale;"
+                           "uniform vec2 windowSize;"
+                           "uniform vec2 screenshotSize;"
+                           "uniform vec2 cursorPos;"
+                           "vec3 to_world(vec3 v) {"
+                           "vec2 ratio = vec2(windowSize.x / screenshotSize.x / cameraScale, windowSize.y / screenshotSize.y / cameraScale);"
+                           "   return vec3((v.x / screenshotSize.x * 2.0 - 1.0) / ratio.x, (v.y / screenshotSize.y * 2.0 - 1.0) / ratio.y, v.z);"
+                           "}"
+                           "void main() {"
+                           "   gl_Position = vec4(to_world((aPos - vec3(cameraPos * vec2(1.0, -1.0), 0.0))), 1.0);"
+                           "   texcoord = aTexCoord;"
+                           "}\0"),
+                        GL_VERTEX_SHADER);
+    GLuint fragment_shader = coom_new_shader(
+        SV("#version 130\n"
+           "out mediump vec4 color;"
+           "in mediump vec2 texcoord;"
+           "uniform sampler2D tex;"
+           "uniform vec2 cursorPos;"
+           "uniform vec2 windowSize;"
+           "uniform float flShadow;"
+           "uniform float flRadius;"
+           "uniform float cameraScale;"
+           "void main() {"
+           "   vec4 cursor = vec4(cursorPos.x, windowSize.y - cursorPos.y, 0.0, 1.0);"
+           "   color = mix(texture(tex, texcoord), vec4(0.0, 0.0, 0.0, 0.0), length(cursor - gl_FragCoord) < (flRadius * cameraScale) ? 0.0 : flShadow);"
+           "}\0"),
+
+        GL_FRAGMENT_SHADER);
+
     glAttachShader(prog, vertex_shader);
     glAttachShader(prog, fragment_shader);
     glLinkProgram(prog);
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
     GLint success;
-    char  infolog[512];
     glGetProgramiv(prog, GL_LINK_STATUS, &success);
     if (!success) {
-        glGetProgramInfoLog(prog, sizeof(infolog), NULL, infolog);
-        coom_error("during linking prog: %s", infolog);
+        char *temp = temp_alloc(512);
+        glGetProgramInfoLog(prog, 512, NULL, temp);
+        coom_error("during linking prog: %s", temp);
+        temp_free(512);
     }
     glUseProgram(prog);
     return prog;
 }
 
 GLuint coom_initialize_shader(GLuint *vao, GLuint *vbo, GLuint *ebo, XImage *img) {
+    coom_info("%s", __PRETTY_FUNCTION__);
     assert(img);
-    GLuint  shader_program = coom_new_shader_prog(vert_shader, frag_shader);
+    GLuint  shader_program = coom_new_shader_prog();
     GLfloat w              = img->width;
     GLfloat h              = img->height;
 
@@ -151,8 +168,58 @@ GLuint coom_initialize_shader(GLuint *vao, GLuint *vbo, GLuint *ebo, XImage *img
 }
 
 void coom_uninitialize_shader(GLuint *vao, GLuint *vbo, GLuint *ebo, GLuint *program) {
+    coom_info("%s", __PRETTY_FUNCTION__);
     glDeleteVertexArrays(1, vao);
     glDeleteBuffers(1, vbo);
     glDeleteBuffers(1, ebo);
     glDeleteProgram(*program);
+}
+
+vec2_t coom_mouse_pos(Display *dpy) {
+    coom_info("%s", __PRETTY_FUNCTION__);
+    Window       root, child;
+    int          root_x, root_y, win_x, win_y;
+    unsigned int mask;
+    XQueryPointer(dpy, DefaultRootWindow(dpy), &root, &child, &root_x, &root_y, &win_x, &win_y, &mask);
+    return vec2(root_x, root_y);
+}
+
+XImage *coom_new_screenshot(Display *dpy, Window win) {
+    coom_info("%s", __PRETTY_FUNCTION__);
+    XWindowAttributes attr;
+    XGetWindowAttributes(dpy, win, &attr);
+    XImage *img = XGetImage(dpy, win, 0, 0, attr.width, attr.height, AllPlanes, ZPixmap);
+    ASSERT_EXIT(img != NULL, 1, "Failed to get screenshot, exiting");
+    return img;
+}
+
+void coom_delete_screenshot(XImage *img) {
+    coom_info("%s", __PRETTY_FUNCTION__);
+    if (img) XDestroyImage(img);
+}
+
+bool coom_save_to_ppm(XImage *img, const char *file_path) {
+    coom_info("%s", __PRETTY_FUNCTION__);
+    if (img == NULL) return false;
+
+    bool  result = true;
+    FILE *f      = fopen(file_path, "wb");
+    if (f == NULL) {
+        coom_error("failed to open file: '%s' - %s", file_path, strerror(errno));
+        return false;
+    }
+    fprintf(f, "P6\n%d %d\n255\n", img->width, img->height);
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            unsigned char color[3];
+            unsigned long pixel = XGetPixel(img, x, y);
+            color[2]            = pixel & img->blue_mask;
+            color[1]            = (pixel & img->green_mask) >> 8;
+            color[0]            = (pixel & img->red_mask) >> 16;
+            fwrite(color, 1, 3, f);
+        }
+    }
+
+    if (f) fclose(f);
+    return result;
 }

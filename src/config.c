@@ -35,6 +35,7 @@ defer:
 coom_config_t *coom_load_config(const char *file_path) {
     assert(file_path && "file_path should not be NULL");
     coom_config_t *result = (coom_config_t *)coom_alloc(NULL, sizeof(coom_config_t));
+    ASSERT_EXIT(result != NULL, 1, "Failed to allocate memory");
     memcpy(result, &default_config, sizeof(coom_config_t));
 
     FILE *f = fopen(file_path, "rb");
