@@ -18,9 +18,9 @@ $ sudo pacman -S mesa libx11 libxext libxrandr
 ## Quick Start
 
 ```console
-$ make all
-$ ./coomer --help
-$ ./coomer          # to just start using
+$ ./cc -o cb ./cb.c
+$ ./cb config --release --display && ./cb build
+$ ./build/release/coomer/coomer                 // just start using
 ```
 
 ## Controls
@@ -45,7 +45,7 @@ Configuration file is located at `$HOME/.config/coomer/config.cfg` and has rough
 # comment
 <param-3> = <value-3>
 ```
-You can generate a new config at `$HOME/.config/boomer/config.cfg` with `$ coomer --new-config`.
+You can generate a new config at `$HOME/.config/coomer/config.cfg` with `$ coomer --new-config`.
 
 Supported parameters:
 
