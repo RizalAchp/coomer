@@ -18,10 +18,22 @@ $ sudo pacman -S mesa libx11 libxext libxrandr
 ## Quick Start
 
 ```console
-$ ./cc -o cb ./cb.c
+$ // using gnu compiler
+$ gcc -o cb ./cb.c
+$ // using clang
+$ clang -o cb ./cb.c
+$
 $ ./cb config --release --display && ./cb build
-$ ./build/release/coomer/coomer                 // just start using
+$ ./build/release/coomer/coomer                 // just start the output executable 
 ```
+
+or install it, it will installed the executable to path `$HOME/.local/bin`
+
+```console
+$ ./cb install
+```
+
+remove the `$`
 
 ## Controls
 
